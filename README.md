@@ -1,5 +1,8 @@
 # MaxAI Crypto
 
+
+<img width="1728" height="960" alt="image" src="https://github.com/user-attachments/assets/ab238bbd-f2d6-4659-89e2-a974250b5071" />
+
 AI financial intelligence for crypto portfolios. Users connect a wallet address, the backend syncs on-chain data and market prices, and the app shows portfolio facts plus an AI assistant that explains holdings, transactions and scenarios.
 
 > **Dashboard = Facts. AI = Intelligence.**
