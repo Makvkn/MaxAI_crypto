@@ -1,0 +1,1400 @@
+openapi: 3.1.0
+
+info:
+  title: MaxAI Crypto API
+  version: 1.0.0
+  description: |
+    The MaxAI Crypto REST contract. This document is the source of truth: a
+    route exists here before it exists in Go, and the frontend switches from its
+    mock adapter to the real API without changing feature code.
+
+    Rules encoded throughout:
+      - every financial value is a decimal string, never a JSON number (§97);
+      - `null` means unknown and must never be rendered as zero (§40);
+      - collections are cursor-paginated; there is no page or offset (§109);
+      - errors always use one envelope with a stable domain code (§105);
+      - SSE is used only for AI responses (§63, §80).
+
+servers:
+  - url: /api/v1
+
+tags:
+  - name: auth
+  - name: wallets
+  - name: portfolio
+  - name: performance
+  - name: transactions
+  - name: ai
+
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/guest:
+    post:
+      tags: [auth]
+      summary: Create an anonymous account
+      description: A guest is a real user with real data, so an upgrade later keeps the same user ID (§10, §12).
+      security: []
+      responses:
+        '201':
+          description: Session created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthSession' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /auth/email/register:
+    post:
+      tags: [auth]
+      summary: Register with email and password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmailCredentials' }
+      responses:
+        '201':
+          description: Session created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthSession' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /auth/email/login:
+    post:
+      tags: [auth]
+      summary: Log in with email and password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmailCredentials' }
+      responses:
+        '200':
+          description: Session issued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthSession' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /auth/google:
+    post:
+      tags: [auth]
+      summary: Log in with a Google ID token
+      description: The backend verifies the token against Google; a client-supplied user identity is never trusted (§15).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GoogleAuthRequest' }
+      responses:
+        '200':
+          description: Session issued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthSession' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      summary: Rotate the refresh session
+      description: Refresh sessions are stored server-side and rotated on every use (§13).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshRequest' }
+      responses:
+        '200':
+          description: New token pair
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthSession' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /auth/upgrade:
+    post:
+      tags: [auth]
+      summary: Upgrade the current guest to a permanent account
+      description: Runs in one transaction and preserves the user ID, so wallets, snapshots and conversations survive (§12).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpgradeAccountRequest' }
+      responses:
+        '200':
+          description: Session issued for the upgraded account
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthSession' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Revoke the current refresh session
+      responses:
+        '204':
+          description: Logged out
+        default: { $ref: '#/components/responses/Error' }
+
+  /auth/session:
+    get:
+      tags: [auth]
+      summary: Resolve the current user
+      responses:
+        '200':
+          description: The authenticated user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /wallets:
+    get:
+      tags: [wallets]
+      summary: List the user's wallets
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of wallets
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Wallet' }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      tags: [wallets]
+      summary: Add a wallet
+      description: |
+        Returns as soon as the wallet row exists and the initial sync is
+        enqueued. The response therefore carries `sync.status = PENDING` and no
+        portfolio (§57, §94).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateWalletRequest' }
+      responses:
+        '201':
+          description: Wallet created and initial sync enqueued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Wallet' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /wallets/{walletId}:
+    parameters:
+      - $ref: '#/components/parameters/WalletId'
+    get:
+      tags: [wallets]
+      summary: Get one wallet with its synchronization state
+      responses:
+        '200':
+          description: The wallet
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Wallet' }
+        default: { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [wallets]
+      summary: Remove a wallet
+      description: A soft delete; historical data is preserved (§17).
+      responses:
+        '204':
+          description: Wallet removed
+        default: { $ref: '#/components/responses/Error' }
+
+  /wallets/{walletId}/sync:
+    parameters:
+      - $ref: '#/components/parameters/WalletId'
+    post:
+      tags: [wallets]
+      summary: Request a manual synchronization
+      description: Enqueues a sync. A sync already in progress is not duplicated (§61).
+      responses:
+        '202':
+          description: Synchronization queued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Wallet' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /wallets/{walletId}/portfolio:
+    parameters:
+      - $ref: '#/components/parameters/WalletId'
+    get:
+      tags: [portfolio]
+      summary: Get the current portfolio
+      description: Every figure is computed by the backend; the client performs no arithmetic (§14, §54).
+      responses:
+        '200':
+          description: The portfolio valuation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Portfolio' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /wallets/{walletId}/performance:
+    parameters:
+      - $ref: '#/components/parameters/WalletId'
+    get:
+      tags: [performance]
+      summary: Get snapshot-based portfolio performance
+      description: |
+        Not PnL: there is no cost basis, no realized/unrealized split and no tax
+        lots in the MVP (§52). When no snapshot anchors the period the status is
+        UNAVAILABLE rather than a fabricated zero (§53).
+      parameters:
+        - name: period
+          in: query
+          required: true
+          schema: { $ref: '#/components/schemas/PerformancePeriod' }
+      responses:
+        '200':
+          description: The performance result and its snapshot series
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PortfolioPerformance' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /wallets/{walletId}/transactions:
+    parameters:
+      - $ref: '#/components/parameters/WalletId'
+    get:
+      tags: [transactions]
+      summary: List wallet transactions
+      description: Ordered by `timestamp DESC, id DESC`, which keeps the cursor stable (§99, §109).
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: type
+          in: query
+          schema: { $ref: '#/components/schemas/TransactionType' }
+      responses:
+        '200':
+          description: A page of transactions
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Transaction' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /wallets/{walletId}/transactions/{transactionId}:
+    parameters:
+      - $ref: '#/components/parameters/WalletId'
+      - name: transactionId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [transactions]
+      summary: Get one transaction
+      responses:
+        '200':
+          description: The transaction
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Transaction' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /ai/usage:
+    get:
+      tags: [ai]
+      summary: Get the daily AI operation budget
+      description: Display only; the limit is enforced server-side (§86, §88).
+      responses:
+        '200':
+          description: Today's usage
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AIUsage' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /ai/scenarios:
+    post:
+      tags: [ai]
+      summary: Simulate a what-if scenario
+      description: |
+        The backend performs the deterministic calculation and the LLM only
+        explains the result. The model never produces the numbers (§83, §85).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ScenarioRequest' }
+      responses:
+        '200':
+          description: The calculated scenario
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScenarioResult' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /ai/conversations:
+    get:
+      tags: [ai]
+      summary: List conversations
+      parameters:
+        - name: wallet_id
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of conversations
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Conversation' }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      tags: [ai]
+      summary: Start a conversation about a wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateConversationRequest' }
+      responses:
+        '201':
+          description: Conversation created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Conversation' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /ai/conversations/{conversationId}:
+    parameters:
+      - $ref: '#/components/parameters/ConversationId'
+    get:
+      tags: [ai]
+      summary: Get one conversation
+      responses:
+        '200':
+          description: The conversation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Conversation' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /ai/conversations/{conversationId}/messages:
+    parameters:
+      - $ref: '#/components/parameters/ConversationId'
+    get:
+      tags: [ai]
+      summary: List conversation messages
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of messages, newest first
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/ConversationMessage' }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      tags: [ai]
+      summary: Send a message and stream the answer
+      description: |
+        Responds with `text/event-stream`. Event payloads are the members of
+        `AIStreamEvent`; a client that meets an unknown event type skips it, so
+        events can be added without breaking the contract (§80, §81).
+
+        The stream terminates with either `completed` or `error`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SendMessageRequest' }
+      responses:
+        '200':
+          description: An SSE stream of AI events
+          content:
+            text/event-stream:
+              schema: { $ref: '#/components/schemas/AIStreamEvent' }
+        default: { $ref: '#/components/responses/Error' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      description: Maximum number of items to return.
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque cursor from a previous page. Never constructed by the client (§109).
+      schema: { type: string }
+    WalletId:
+      name: walletId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ConversationId:
+      name: conversationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    Error:
+      description: |
+        A domain error. Provider names, upstream HTTP details and stack traces
+        never appear here (§28, §105).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiErrorEnvelope' }
+
+  schemas:
+    Decimal:
+      type: string
+      description: |
+        Fixed-point decimal serialized as a string, matching PostgreSQL NUMERIC
+        and Go decimal.Decimal. Never a JSON number: floating point is not
+        allowed for money (§97, §112).
+      pattern: '^-?\d+(\.\d+)?$'
+      examples: ['1234.5678', '-20']
+
+    Timestamp:
+      type: string
+      format: date-time
+      description: RFC 3339 timestamp, always UTC (§113).
+
+    DateOnly:
+      type: string
+      format: date
+
+    CurrencyCode:
+      type: string
+      enum: [USD]
+
+    CursorPage:
+      type: object
+      description: The single pagination envelope. There is no page or offset (§109).
+      required: [items, next_cursor, has_more]
+      properties:
+        items:
+          type: array
+          items: {}
+        next_cursor:
+          type: [string, 'null']
+        has_more:
+          type: boolean
+
+    ApiErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error: { $ref: '#/components/schemas/ApiErrorBody' }
+
+    ApiErrorBody:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Stable domain error code. The set is open so new codes degrade gracefully (§106).
+        message:
+          type: string
+          description: User-safe message. Internal causes stay in the logs.
+        details:
+          type: object
+          additionalProperties: true
+
+    # ------------------------------------------------------------------ enums
+
+    ChainId:
+      type: string
+      description: Chains are domain entities backed by configuration, not hardcoded branches (§20).
+      examples: [ethereum, bitcoin, bnb, solana, litecoin, xrpl, tron, dogecoin]
+
+    WalletStatus:
+      type: string
+      enum: [ACTIVE, SYNCING, ERROR, PAUSED, DELETED]
+
+    SyncStatus:
+      type: string
+      description: 'PENDING -> SYNCING -> READY | PARTIAL | FAILED (§18).'
+      enum: [PENDING, SYNCING, READY, PARTIAL, FAILED]
+
+    SyncStage:
+      type: string
+      description: Reported only once the backend has actually reached the stage (§19).
+      enum:
+        - FETCHING_BALANCES
+        - FETCHING_TRANSACTIONS
+        - NORMALIZING_ASSETS
+        - FETCHING_PRICES
+        - CALCULATING_PORTFOLIO
+        - PREPARING_ANALYSIS
+
+    DataFreshness:
+      type: string
+      description: Age of the data. Thresholds are backend configuration (§37).
+      enum: [FRESH, RECENT, STALE, VERY_STALE]
+
+    DataQuality:
+      type: string
+      description: How much of the figure the user may believe (§41, §42).
+      enum: [COMPLETE, PARTIAL, STALE, UNAVAILABLE]
+
+    ValuationStatus:
+      type: string
+      enum: [COMPLETE, PARTIAL, UNAVAILABLE]
+
+    PriceStatus:
+      type: string
+      enum: [AVAILABLE, UNAVAILABLE]
+
+    AssetType:
+      type: string
+      enum: [NATIVE, TOKEN, UNKNOWN]
+
+    AssetVisibility:
+      type: string
+      description: Assigned by deterministic backend rules, never by the model (§43).
+      enum: [VISIBLE, HIDDEN_DUST, HIDDEN_SPAM, UNKNOWN]
+
+    TransactionType:
+      type: string
+      description: Assigned by the backend classifier; UNKNOWN stays UNKNOWN (§47, §48).
+      enum: [TRANSFER, SWAP, STAKE, UNSTAKE, CLAIM, APPROVE, CONTRACT_INTERACTION, UNKNOWN]
+
+    TransactionStatus:
+      type: string
+      enum: [SUCCESS, FAILED, PENDING]
+
+    PerformancePeriod:
+      type: string
+      enum: ['24h', '7d', '30d', all]
+
+    PerformanceStatus:
+      type: string
+      enum: [AVAILABLE, PARTIAL, UNAVAILABLE]
+
+    NoticeSeverity:
+      type: string
+      enum: [INFO, WARNING]
+
+    DataNoticeCode:
+      type: string
+      description: Machine-readable facts; the frontend owns the wording (§44, §141).
+      enum:
+        - UNPRICED_ASSETS_EXCLUDED
+        - NFTS_EXCLUDED_FROM_VALUATION
+        - DEFI_POSITIONS_EXCLUDED
+        - DATA_STALE
+        - HISTORY_INCOMPLETE
+        - SYNC_PARTIALLY_FAILED
+
+    UserKind:
+      type: string
+      enum: [GUEST, REGISTERED]
+
+    AuthMethod:
+      type: string
+      enum: [GUEST, GOOGLE, EMAIL]
+
+    SubscriptionPlan:
+      type: string
+      enum: [FREE, PRO]
+
+    SubscriptionStatus:
+      type: string
+      enum: [ACTIVE, CANCELED, EXPIRED]
+
+    ScenarioType:
+      type: string
+      enum: [ASSET_PRICE_CHANGE]
+
+    AIIntent:
+      type: string
+      enum:
+        - PORTFOLIO_SUMMARY
+        - PORTFOLIO_PERFORMANCE
+        - PORTFOLIO_ALLOCATION
+        - TRANSACTION_EXPLANATION
+        - SCENARIO_SIMULATION
+        - GENERAL_PORTFOLIO_QUESTION
+        - UNSUPPORTED
+
+    AIToolName:
+      type: string
+      description: Domain tools executed by the backend orchestrator (§70).
+      enum:
+        - get_portfolio
+        - get_positions
+        - get_portfolio_performance
+        - get_transaction
+        - get_historical_portfolio
+        - get_asset_price
+        - simulate_scenario
+
+    AIToolCallStatus:
+      type: string
+      enum: [RUNNING, COMPLETED, FAILED]
+
+    MessageRole:
+      type: string
+      enum: [USER, ASSISTANT]
+
+    MessageStatus:
+      type: string
+      enum: [PENDING, STREAMING, COMPLETED, FAILED]
+
+    AIEvidenceType:
+      type: string
+      enum:
+        - calculation
+        - portfolio
+        - portfolio_performance
+        - portfolio_snapshot
+        - position
+        - transaction
+        - price
+        - scenario
+
+    AIReferenceType:
+      type: string
+      enum: [asset, transaction, portfolio, scenario]
+
+    # ------------------------------------------------------------------- auth
+
+    Entitlements:
+      type: object
+      required: [max_wallets, ai_operations_per_day, features]
+      properties:
+        max_wallets: { type: integer }
+        ai_operations_per_day: { type: integer }
+        features:
+          type: array
+          items: { type: string }
+
+    Subscription:
+      type: object
+      required: [plan, status, current_period_end, entitlements]
+      properties:
+        plan: { $ref: '#/components/schemas/SubscriptionPlan' }
+        status: { $ref: '#/components/schemas/SubscriptionStatus' }
+        current_period_end:
+          oneOf:
+            - { $ref: '#/components/schemas/Timestamp' }
+            - { type: 'null' }
+        entitlements: { $ref: '#/components/schemas/Entitlements' }
+
+    User:
+      type: object
+      required: [id, kind, email, display_name, auth_methods, subscription, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { $ref: '#/components/schemas/UserKind' }
+        email: { type: [string, 'null'], format: email }
+        display_name: { type: [string, 'null'] }
+        auth_methods:
+          type: array
+          items: { $ref: '#/components/schemas/AuthMethod' }
+        subscription: { $ref: '#/components/schemas/Subscription' }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+
+    AuthSession:
+      type: object
+      required: [access_token, refresh_token, expires_at, user]
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        expires_at: { $ref: '#/components/schemas/Timestamp' }
+        user: { $ref: '#/components/schemas/User' }
+
+    EmailCredentials:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8, writeOnly: true }
+
+    GoogleAuthRequest:
+      type: object
+      required: [id_token]
+      properties:
+        id_token:
+          type: string
+          description: Google ID token from the browser OAuth flow, verified server-side (§15).
+
+    RefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token: { type: string }
+
+    UpgradeAccountRequest:
+      oneOf:
+        - type: object
+          required: [method, email, password]
+          properties:
+            method: { type: string, enum: [EMAIL] }
+            email: { type: string, format: email }
+            password: { type: string, minLength: 8, writeOnly: true }
+        - type: object
+          required: [method, id_token]
+          properties:
+            method: { type: string, enum: [GOOGLE] }
+            id_token: { type: string }
+      discriminator:
+        propertyName: method
+
+    # ---------------------------------------------------------------- wallets
+
+    WalletSyncState:
+      type: object
+      required: [status, stage, stages_completed, started_at, completed_at, last_synced_at, data_freshness, error]
+      properties:
+        status: { $ref: '#/components/schemas/SyncStatus' }
+        stage:
+          oneOf:
+            - { $ref: '#/components/schemas/SyncStage' }
+            - { type: 'null' }
+        stages_completed:
+          type: array
+          items: { $ref: '#/components/schemas/SyncStage' }
+        started_at:
+          oneOf:
+            - { $ref: '#/components/schemas/Timestamp' }
+            - { type: 'null' }
+        completed_at:
+          oneOf:
+            - { $ref: '#/components/schemas/Timestamp' }
+            - { type: 'null' }
+        last_synced_at:
+          oneOf:
+            - { $ref: '#/components/schemas/Timestamp' }
+            - { type: 'null' }
+        data_freshness:
+          oneOf:
+            - { $ref: '#/components/schemas/DataFreshness' }
+            - { type: 'null' }
+        error:
+          oneOf:
+            - { $ref: '#/components/schemas/ApiErrorBody' }
+            - { type: 'null' }
+
+    Wallet:
+      type: object
+      required: [id, chain_id, address, label, status, sync, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        chain_id: { $ref: '#/components/schemas/ChainId' }
+        address:
+          type: string
+          description: Normalized to the chain's canonical form by the backend (§188).
+        label: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/WalletStatus' }
+        sync: { $ref: '#/components/schemas/WalletSyncState' }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        updated_at: { $ref: '#/components/schemas/Timestamp' }
+
+    CreateWalletRequest:
+      type: object
+      required: [chain_id, address]
+      properties:
+        chain_id: { $ref: '#/components/schemas/ChainId' }
+        address: { type: string }
+        label: { type: [string, 'null'] }
+
+    # ----------------------------------------------------------------- assets
+
+    Asset:
+      type: object
+      description: |
+        Identity is chain plus contract address; a symbol alone is never an
+        identity. Which provider priced the asset is not exposed (§31, §33).
+      required: [id, chain_id, contract_address, symbol, name, decimals, asset_type, icon_url, has_market_data]
+      properties:
+        id: { type: string, format: uuid }
+        chain_id: { $ref: '#/components/schemas/ChainId' }
+        contract_address:
+          type: [string, 'null']
+          description: Null for a chain's native asset.
+        symbol: { type: string }
+        name: { type: string }
+        decimals: { type: integer }
+        asset_type: { $ref: '#/components/schemas/AssetType' }
+        icon_url: { type: [string, 'null'], format: uri }
+        has_market_data:
+          type: boolean
+          description: False means the price is unknown, not zero (§40).
+
+    Price:
+      type: object
+      required: [asset_id, value_usd, currency, status, freshness, as_of, change_24h_pct]
+      properties:
+        asset_id: { type: string, format: uuid }
+        value_usd:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+        currency: { $ref: '#/components/schemas/CurrencyCode' }
+        status: { $ref: '#/components/schemas/PriceStatus' }
+        freshness: { $ref: '#/components/schemas/DataFreshness' }
+        as_of:
+          oneOf:
+            - { $ref: '#/components/schemas/Timestamp' }
+            - { type: 'null' }
+        change_24h_pct:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+
+    # -------------------------------------------------------------- portfolio
+
+    DataNotice:
+      type: object
+      required: [code, severity]
+      properties:
+        code: { $ref: '#/components/schemas/DataNoticeCode' }
+        severity: { $ref: '#/components/schemas/NoticeSeverity' }
+        params:
+          type: object
+          description: Substitution values for the frontend copy.
+          additionalProperties:
+            type: [string, number]
+
+    WalletPosition:
+      type: object
+      required:
+        [asset, balance, balance_raw, price, value_usd, allocation_pct, change_24h_pct,
+         change_24h_usd, visibility, valuation_status, updated_at]
+      properties:
+        asset: { $ref: '#/components/schemas/Asset' }
+        balance:
+          allOf: [{ $ref: '#/components/schemas/Decimal' }]
+          description: Balance scaled by the asset's decimals.
+        balance_raw:
+          type: string
+          description: Unscaled on-chain integer, kept for traceability (§38).
+        price:
+          oneOf:
+            - { $ref: '#/components/schemas/Price' }
+            - { type: 'null' }
+        value_usd:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+        allocation_pct:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+        change_24h_pct:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+        change_24h_usd:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+        visibility: { $ref: '#/components/schemas/AssetVisibility' }
+        valuation_status: { $ref: '#/components/schemas/ValuationStatus' }
+        updated_at: { $ref: '#/components/schemas/Timestamp' }
+
+    PortfolioExclusions:
+      type: object
+      description: What the backend left out of the valuation, and why (§44).
+      required: [unpriced_positions, nfts_excluded, defi_positions_excluded]
+      properties:
+        unpriced_positions: { type: integer }
+        nfts_excluded: { type: boolean }
+        defi_positions_excluded: { type: boolean }
+
+    Portfolio:
+      type: object
+      required:
+        [wallet_id, currency, total_value_usd, valuation_status, data_quality, data_freshness,
+         change_24h_usd, change_24h_pct, as_of, last_synced_at, calculation_version, positions,
+         visible_positions_count, hidden_positions_count, exclusions, notices]
+      properties:
+        wallet_id: { type: string, format: uuid }
+        currency: { $ref: '#/components/schemas/CurrencyCode' }
+        total_value_usd:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+        valuation_status: { $ref: '#/components/schemas/ValuationStatus' }
+        data_quality: { $ref: '#/components/schemas/DataQuality' }
+        data_freshness: { $ref: '#/components/schemas/DataFreshness' }
+        change_24h_usd:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+        change_24h_pct:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+        as_of: { $ref: '#/components/schemas/Timestamp' }
+        last_synced_at:
+          oneOf:
+            - { $ref: '#/components/schemas/Timestamp' }
+            - { type: 'null' }
+        calculation_version:
+          type: integer
+          description: Version of the algorithm that produced this valuation (§141).
+        positions:
+          type: array
+          items: { $ref: '#/components/schemas/WalletPosition' }
+        visible_positions_count: { type: integer }
+        hidden_positions_count: { type: integer }
+        exclusions: { $ref: '#/components/schemas/PortfolioExclusions' }
+        notices:
+          type: array
+          items: { $ref: '#/components/schemas/DataNotice' }
+
+    # ------------------------------------------------------------ performance
+
+    PortfolioSnapshotPoint:
+      type: object
+      required: [captured_at, total_value_usd, status]
+      properties:
+        captured_at: { $ref: '#/components/schemas/Timestamp' }
+        total_value_usd:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+        status: { $ref: '#/components/schemas/ValuationStatus' }
+
+    PerformanceEndpoint:
+      type: object
+      required: [captured_at, value_usd, status]
+      properties:
+        captured_at: { $ref: '#/components/schemas/Timestamp' }
+        value_usd: { $ref: '#/components/schemas/Decimal' }
+        status: { $ref: '#/components/schemas/ValuationStatus' }
+
+    PerformanceDriver:
+      type: object
+      required: [asset, allocation_pct, contribution_usd, contribution_pct, change_pct]
+      properties:
+        asset: { $ref: '#/components/schemas/Asset' }
+        allocation_pct:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+        contribution_usd:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+        contribution_pct:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+        change_pct:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+
+    PortfolioPerformance:
+      type: object
+      required:
+        [wallet_id, period, status, data_quality, currency, opening, closing,
+         change_usd, change_pct, series, drivers, unavailable_reason,
+         calculation_id, calculation_version]
+      properties:
+        wallet_id: { type: string, format: uuid }
+        period: { $ref: '#/components/schemas/PerformancePeriod' }
+        status: { $ref: '#/components/schemas/PerformanceStatus' }
+        data_quality: { $ref: '#/components/schemas/DataQuality' }
+        currency: { $ref: '#/components/schemas/CurrencyCode' }
+        opening:
+          oneOf:
+            - { $ref: '#/components/schemas/PerformanceEndpoint' }
+            - { type: 'null' }
+        closing:
+          oneOf:
+            - { $ref: '#/components/schemas/PerformanceEndpoint' }
+            - { type: 'null' }
+        change_usd:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+        change_pct:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+        series:
+          type: array
+          description: Real snapshots only; the series is never interpolated (§51).
+          items: { $ref: '#/components/schemas/PortfolioSnapshotPoint' }
+        drivers:
+          type: array
+          items: { $ref: '#/components/schemas/PerformanceDriver' }
+        unavailable_reason:
+          type: [string, 'null']
+          description: Domain error code explaining an UNAVAILABLE status.
+        calculation_id: { type: [string, 'null'], format: uuid }
+        calculation_version: { type: [integer, 'null'] }
+
+    # ----------------------------------------------------------- transactions
+
+    Transaction:
+      type: object
+      required:
+        [id, wallet_id, chain_id, tx_hash, block_number, timestamp, status, type,
+         from_address, to_address, asset_in, amount_in, value_in_usd, asset_out,
+         amount_out, value_out_usd, fee_asset, fee_amount, fee_value_usd, protocol,
+         counterparty, explorer_url, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        wallet_id: { type: string, format: uuid }
+        chain_id: { $ref: '#/components/schemas/ChainId' }
+        tx_hash: { type: string }
+        block_number: { type: [integer, 'null'], format: int64 }
+        timestamp: { $ref: '#/components/schemas/Timestamp' }
+        status: { $ref: '#/components/schemas/TransactionStatus' }
+        type: { $ref: '#/components/schemas/TransactionType' }
+        from_address: { type: [string, 'null'] }
+        to_address: { type: [string, 'null'] }
+        asset_in:
+          oneOf:
+            - { $ref: '#/components/schemas/Asset' }
+            - { type: 'null' }
+        amount_in:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+        value_in_usd:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+        asset_out:
+          oneOf:
+            - { $ref: '#/components/schemas/Asset' }
+            - { type: 'null' }
+        amount_out:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+        value_out_usd:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+        fee_asset:
+          oneOf:
+            - { $ref: '#/components/schemas/Asset' }
+            - { type: 'null' }
+        fee_amount:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+        fee_value_usd:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+        protocol: { type: [string, 'null'] }
+        counterparty: { type: [string, 'null'] }
+        explorer_url:
+          type: [string, 'null']
+          format: uri
+          description: Built by the backend so the client needs no per-chain URL knowledge.
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        updated_at: { $ref: '#/components/schemas/Timestamp' }
+
+    # -------------------------------------------------------------- scenarios
+
+    ScenarioRequest:
+      type: object
+      required: [wallet_id, type, asset_id, change_pct]
+      properties:
+        wallet_id: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/ScenarioType' }
+        asset_id: { type: string, format: uuid }
+        change_pct:
+          allOf: [{ $ref: '#/components/schemas/Decimal' }]
+          description: Signed percentage change, for example "-20".
+
+    ScenarioBaseline:
+      type: object
+      required: [portfolio_value_usd, asset_value_usd, asset_allocation_pct]
+      properties:
+        portfolio_value_usd:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+        asset_value_usd:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+        asset_allocation_pct:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+
+    ScenarioProjection:
+      type: object
+      required:
+        [portfolio_value_usd, asset_value_usd, asset_impact_usd,
+         portfolio_change_usd, portfolio_change_pct]
+      properties:
+        portfolio_value_usd:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+        asset_value_usd:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+        asset_impact_usd:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+        portfolio_change_usd:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+        portfolio_change_pct:
+          oneOf:
+            - { $ref: '#/components/schemas/Decimal' }
+            - { type: 'null' }
+
+    ScenarioResult:
+      type: object
+      required:
+        [id, wallet_id, type, currency, asset, change_pct, baseline, projection,
+         data_quality, calculation_id, calculation_version, created_at, explanation]
+      properties:
+        id: { type: string, format: uuid }
+        wallet_id: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/ScenarioType' }
+        currency: { $ref: '#/components/schemas/CurrencyCode' }
+        asset: { $ref: '#/components/schemas/Asset' }
+        change_pct: { $ref: '#/components/schemas/Decimal' }
+        baseline: { $ref: '#/components/schemas/ScenarioBaseline' }
+        projection: { $ref: '#/components/schemas/ScenarioProjection' }
+        data_quality: { $ref: '#/components/schemas/DataQuality' }
+        calculation_id: { type: string, format: uuid }
+        calculation_version: { type: integer }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        explanation:
+          oneOf:
+            - { $ref: '#/components/schemas/AIResponse' }
+            - { type: 'null' }
+
+    # --------------------------------------------------------------------- ai
+
+    AIEvidence:
+      type: object
+      description: Backend fact a claim is anchored to (§73).
+      required: [type, id]
+      properties:
+        type: { $ref: '#/components/schemas/AIEvidenceType' }
+        id: { type: string }
+
+    AIClaim:
+      type: object
+      required: [text, evidence]
+      properties:
+        text: { type: string }
+        evidence:
+          type: array
+          items: { $ref: '#/components/schemas/AIEvidence' }
+
+    AIReference:
+      type: object
+      required: [type, id, label]
+      properties:
+        type: { $ref: '#/components/schemas/AIReferenceType' }
+        id: { type: string }
+        label: { type: [string, 'null'] }
+
+    AIResponse:
+      type: object
+      description: |
+        An AI answer is a structured object, never a bare string. It is validated
+        against this schema before it reaches the client (§74, §178).
+      required: [answer, intent, data_quality, claims, references, unsupported_reason]
+      properties:
+        answer: { type: string }
+        intent: { $ref: '#/components/schemas/AIIntent' }
+        data_quality: { $ref: '#/components/schemas/DataQuality' }
+        claims:
+          type: array
+          items: { $ref: '#/components/schemas/AIClaim' }
+        references:
+          type: array
+          items: { $ref: '#/components/schemas/AIReference' }
+        unsupported_reason:
+          type: [string, 'null']
+          description: Set when the intent is UNSUPPORTED, so the UI explains instead of pretending (§76).
+
+    AIToolCall:
+      type: object
+      required: [id, tool, status, started_at, completed_at]
+      properties:
+        id: { type: string }
+        tool: { $ref: '#/components/schemas/AIToolName' }
+        status: { $ref: '#/components/schemas/AIToolCallStatus' }
+        started_at: { $ref: '#/components/schemas/Timestamp' }
+        completed_at:
+          oneOf:
+            - { $ref: '#/components/schemas/Timestamp' }
+            - { type: 'null' }
+
+    Conversation:
+      type: object
+      required: [id, wallet_id, title, message_count, last_message_preview, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        wallet_id: { type: string, format: uuid }
+        title: { type: string }
+        message_count: { type: integer }
+        last_message_preview: { type: [string, 'null'] }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        updated_at: { $ref: '#/components/schemas/Timestamp' }
+
+    ConversationMessage:
+      type: object
+      required: [id, conversation_id, role, status, content, response, tool_calls, error, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        conversation_id: { type: string, format: uuid }
+        role: { $ref: '#/components/schemas/MessageRole' }
+        status: { $ref: '#/components/schemas/MessageStatus' }
+        content: { type: string }
+        response:
+          oneOf:
+            - { $ref: '#/components/schemas/AIResponse' }
+            - { type: 'null' }
+        tool_calls:
+          type: array
+          items: { $ref: '#/components/schemas/AIToolCall' }
+        error:
+          oneOf:
+            - { $ref: '#/components/schemas/ApiErrorBody' }
+            - { type: 'null' }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+
+    CreateConversationRequest:
+      type: object
+      required: [wallet_id]
+      properties:
+        wallet_id: { type: string, format: uuid }
+        title: { type: [string, 'null'] }
+
+    SendMessageRequest:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string, minLength: 1 }
+        context:
+          type: object
+          description: The entity the question is about. The backend decides which tools this implies.
+          properties:
+            transaction_id: { type: string, format: uuid }
+            scenario_id: { type: string, format: uuid }
+
+    AIUsage:
+      type: object
+      required: [date, used, limit, remaining, resets_at, plan]
+      properties:
+        date: { $ref: '#/components/schemas/DateOnly' }
+        used: { type: integer }
+        limit: { type: integer }
+        remaining: { type: integer }
+        resets_at:
+          allOf: [{ $ref: '#/components/schemas/Timestamp' }]
+          description: Next UTC midnight (§86).
+        plan: { $ref: '#/components/schemas/SubscriptionPlan' }
+
+    AIStreamEvent:
+      oneOf:
+        - $ref: '#/components/schemas/AIStreamToolStartedEvent'
+        - $ref: '#/components/schemas/AIStreamToolCompletedEvent'
+        - $ref: '#/components/schemas/AIStreamTextDeltaEvent'
+        - $ref: '#/components/schemas/AIStreamCompletedEvent'
+        - $ref: '#/components/schemas/AIStreamErrorEvent'
+      discriminator:
+        propertyName: type
+
+    AIStreamToolStartedEvent:
+      type: object
+      required: [type, tool_call_id, tool]
+      properties:
+        type: { type: string, enum: [tool_started] }
+        tool_call_id: { type: string }
+        tool: { $ref: '#/components/schemas/AIToolName' }
+
+    AIStreamToolCompletedEvent:
+      type: object
+      required: [type, tool_call_id, tool, ok]
+      properties:
+        type: { type: string, enum: [tool_completed] }
+        tool_call_id: { type: string }
+        tool: { $ref: '#/components/schemas/AIToolName' }
+        ok: { type: boolean }
+
+    AIStreamTextDeltaEvent:
+      type: object
+      required: [type, text]
+      properties:
+        type: { type: string, enum: [text_delta] }
+        text: { type: string }
+
+    AIStreamCompletedEvent:
+      type: object
+      description: Terminal success event carrying the persisted message.
+      required: [type, message, usage]
+      properties:
+        type: { type: string, enum: [completed] }
+        message: { $ref: '#/components/schemas/ConversationMessage' }
+        usage:
+          oneOf:
+            - { $ref: '#/components/schemas/AIUsage' }
+            - { type: 'null' }
+
+    AIStreamErrorEvent:
+      type: object
+      description: Terminal failure event carrying a domain error (§81).
+      required: [type, error]
+      properties:
+        type: { type: string, enum: [error] }
+        error: { $ref: '#/components/schemas/ApiErrorBody' }
