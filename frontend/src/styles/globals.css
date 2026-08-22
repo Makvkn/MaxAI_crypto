@@ -1,0 +1,158 @@
+@import 'tailwindcss';
+
+/*
+  MaxAI Crypto — design tokens.
+
+  Visual direction: premium, calm, technical, trustworthy. One restrained
+  accent, a single positive/negative signal pair for financial deltas, and a
+  neutral scale that keeps dense numeric data legible.
+*/
+@theme {
+  --color-base: #07080a;
+  --color-base-elevated: #0b0d10;
+  --color-surface: #0e1014;
+  --color-surface-raised: #14171c;
+  --color-surface-hover: #191d23;
+
+  --color-line: #1d2127;
+  --color-line-strong: #2b3139;
+
+  --color-fg: #e8ebef;
+  --color-fg-muted: #99a2ad;
+  --color-fg-subtle: #69727e;
+
+  --color-accent: #6c8cff;
+  --color-accent-hover: #7f9bff;
+  --color-accent-quiet: #1a2340;
+  --color-accent-fg: #0a0c10;
+
+  --color-positive: #35c48f;
+  --color-positive-quiet: #10281f;
+  --color-negative: #f0616d;
+  --color-negative-quiet: #2b1418;
+  --color-caution: #e0a458;
+  --color-caution-quiet: #2a2015;
+  --color-neutral-quiet: #1a1d23;
+
+  --font-sans:
+    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
+    Arial, sans-serif;
+  --font-mono:
+    'JetBrains Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+
+  --text-display: 3.25rem;
+  --text-display--line-height: 1.05;
+  --text-display--letter-spacing: -0.03em;
+
+  --radius-card: 0.875rem;
+
+  --animate-fade-in: fade-in 0.28s ease-out both;
+  --animate-rise: rise 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-pulse-soft: pulse-soft 2s ease-in-out infinite;
+  --animate-caret: caret 1s steps(2) infinite;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@keyframes caret {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-base);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Financial figures must stay column-aligned across rows. */
+  .tabular,
+  th,
+  td {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: var(--color-accent-quiet);
+  }
+
+  /* Scrollbars: present but quiet. */
+  * {
+    scrollbar-color: var(--color-line-strong) transparent;
+    scrollbar-width: thin;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .grid-noise {
+    background-image:
+      linear-gradient(to right, color-mix(in srgb, var(--color-line) 55%, transparent) 1px, transparent 1px),
+      linear-gradient(to bottom, color-mix(in srgb, var(--color-line) 55%, transparent) 1px, transparent 1px);
+    background-size: 56px 56px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
