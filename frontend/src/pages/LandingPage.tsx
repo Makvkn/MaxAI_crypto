@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/Icon'
 import { Container } from '@/components/layout/Container'
 import { SiteFooter, SiteHeader } from '@/components/layout/SiteHeader'
+import { useSession } from '@/features/auth/sessionContext'
 import { ChainMonogram } from '@/features/wallets/components/ChainMonogram'
 import { SUPPORTED_CHAINS } from '@/app/config/chains'
 import { analytics } from '@/lib/analytics/analytics'
@@ -47,6 +48,8 @@ export function LandingPage() {
 }
 
 function Hero() {
+  const { isAuthenticated } = useSession()
+
   return (
     <section className="relative overflow-hidden border-b border-line/70">
       <div
@@ -86,9 +89,11 @@ function Hero() {
               >
                 Analyze your wallet
               </ButtonLink>
-              <ButtonLink to="/sign-in" size="lg" variant="quiet">
-                Sign in
-              </ButtonLink>
+              {!isAuthenticated ? (
+                <ButtonLink to="/sign-in" size="lg" variant="quiet">
+                  Sign in
+                </ButtonLink>
+              ) : null}
             </div>
 
             <p className="mt-6 flex items-center gap-2 text-[13px] text-fg-subtle">
