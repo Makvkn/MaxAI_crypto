@@ -27,7 +27,14 @@ export function AppRouter() {
       <RouteTracker />
       <Suspense fallback={<RouteFallback />}>
         <Routes>
-          <Route path="/" element={<LandingPage />} />
+          <Route
+            path="/"
+            element={
+              <GuestOnly>
+                <LandingPage />
+              </GuestOnly>
+            }
+          />
           <Route path="/analyze" element={<AnalyzePage />} />
           <Route path="/sign-in" element={<SignInPage />} />
           <Route path="/dashboard" element={<DashboardEntry />} />
@@ -55,6 +62,13 @@ export function AppRouter() {
 function RequireSession({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useSession()
   if (!isAuthenticated) return <Navigate to="/analyze" replace />
+  return <>{children}</>
+}
+
+/** Landing is marketing for signed-out visitors only. */
+function GuestOnly({ children }: { children: ReactNode }) {
+  const { isAuthenticated } = useSession()
+  if (isAuthenticated) return <Navigate to="/dashboard" replace />
   return <>{children}</>
 }
 

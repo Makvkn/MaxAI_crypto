@@ -38,7 +38,7 @@ export function SignInPage() {
   const [error, setError] = useState<unknown>(null)
 
   const goBack = () => {
-    navigate(selectedWalletId ? `/wallets/${selectedWalletId}` : '/', {
+    navigate(selectedWalletId ? `/wallets/${selectedWalletId}` : '/dashboard', {
       replace: true,
     })
   }

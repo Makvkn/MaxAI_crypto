@@ -45,7 +45,7 @@ import { cn } from '@/lib/utils/cn'
  */
 export function WalletDashboardPage() {
   const { walletId } = useParams<{ walletId: string }>()
-  if (!walletId) return <Navigate to="/" replace />
+  if (!walletId) return <Navigate to="/dashboard" replace />
 
   return (
     <WalletProvider walletId={walletId}>
