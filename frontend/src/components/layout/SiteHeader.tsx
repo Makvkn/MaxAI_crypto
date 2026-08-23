@@ -1,15 +1,14 @@
 import { Link } from 'react-router-dom'
 import { ButtonLink } from '@/components/ui/Button'
 import { ArrowRight } from '@/components/ui/Icon'
+import { AccountMenu } from '@/features/auth/components/AccountMenu'
 import { useSession } from '@/features/auth/sessionContext'
-import { usePreferencesStore } from '@/stores/preferencesStore'
 import { Container } from './Container'
 import { Logo } from './Logo'
 
 /** Marketing header used by the landing page. */
 export function SiteHeader() {
   const { isAuthenticated } = useSession()
-  const selectedWalletId = usePreferencesStore((state) => state.selectedWalletId)
 
   return (
     <header className="sticky top-0 z-40 border-b border-line/70 bg-base/85 backdrop-blur-xl">
@@ -17,14 +16,13 @@ export function SiteHeader() {
         <Logo />
 
         <nav className="flex items-center gap-2" aria-label="Main">
-          {isAuthenticated && selectedWalletId ? (
-            <ButtonLink
-              to={`/wallets/${selectedWalletId}`}
-              variant="secondary"
-              size="sm"
-            >
-              Open dashboard
-            </ButtonLink>
+          {isAuthenticated ? (
+            <>
+              <ButtonLink to="/dashboard" variant="secondary" size="sm">
+                Open dashboard
+              </ButtonLink>
+              <AccountMenu />
+            </>
           ) : (
             <Link
               to="/sign-in"
