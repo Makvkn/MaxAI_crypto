@@ -3,6 +3,7 @@ import { api } from '@/api'
 import type { Transaction, TransactionType } from '@/api/types'
 import { queryKeys } from '@/lib/query/queryKeys'
 import { useCursorInfiniteQuery } from '@/lib/query/useCursorInfiniteQuery'
+import { useProtectedQueryEnabled } from '@/features/auth/useProtectedQueryEnabled'
 
 /**
  * Transaction history.
@@ -15,10 +16,11 @@ export function useTransactions(
   params?: { type?: TransactionType; limit?: number; enabled?: boolean },
 ) {
   const limit = params?.limit ?? 25
+  const protectedEnabled = useProtectedQueryEnabled(params?.enabled ?? true)
 
   return useCursorInfiniteQuery<Transaction>({
     queryKey: queryKeys.transactions(walletId, { type: params?.type }),
-    enabled: params?.enabled ?? true,
+    enabled: protectedEnabled,
     fetchPage: ({ cursor, signal }) =>
       api.transactions.list(
         walletId,
@@ -32,11 +34,13 @@ export function useTransaction(
   walletId: string,
   transactionId: string | null,
 ) {
+  const protectedEnabled = useProtectedQueryEnabled(Boolean(transactionId))
+
   return useQuery({
     queryKey: queryKeys.transaction(walletId, transactionId ?? 'none'),
     queryFn: ({ signal }) =>
       api.transactions.get(walletId, transactionId as string, { signal }),
-    enabled: Boolean(transactionId),
+    enabled: protectedEnabled,
     staleTime: 5 * 60_000,
   })
 }

@@ -60,14 +60,16 @@ export function AppRouter() {
  * Authorisation itself stays with the backend on every request.
  */
 function RequireSession({ children }: { children: ReactNode }) {
-  const { isAuthenticated } = useSession()
+  const { authReady, isAuthenticated } = useSession()
+  if (!authReady) return <RouteFallback />
   if (!isAuthenticated) return <Navigate to="/analyze" replace />
   return <>{children}</>
 }
 
 /** Landing is marketing for signed-out visitors only. */
 function GuestOnly({ children }: { children: ReactNode }) {
-  const { isAuthenticated } = useSession()
+  const { authReady, isAuthenticated } = useSession()
+  if (!authReady) return <RouteFallback />
   if (isAuthenticated) return <Navigate to="/dashboard" replace />
   return <>{children}</>
 }

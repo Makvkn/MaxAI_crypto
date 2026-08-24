@@ -38,6 +38,11 @@ export function createAuthApi(http: HttpClient): AuthApi {
     getCurrentUser: (options) =>
       http.get<User>('/auth/session', undefined, options),
 
+    initializeSession: async (options) => {
+      await http.ensureValidAccessToken()
+      return http.get<User>('/auth/session', undefined, options)
+    },
+
     logout: (options) => http.post<void>('/auth/logout', {}, options),
   }
 }

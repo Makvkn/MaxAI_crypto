@@ -2,7 +2,6 @@ import {
   useMutation,
   useQuery,
   useQueryClient,
-  type UseQueryOptions,
 } from '@tanstack/react-query'
 import { api } from '@/api'
 import {
@@ -13,6 +12,7 @@ import {
 import { queryKeys } from '@/lib/query/queryKeys'
 import { analytics } from '@/lib/analytics/analytics'
 import { useSession } from '@/features/auth/sessionContext'
+import { useProtectedQueryEnabled } from '@/features/auth/useProtectedQueryEnabled'
 
 /**
  * Wallet server state.
@@ -21,12 +21,12 @@ import { useSession } from '@/features/auth/sessionContext'
  * the contract is already plural, so multi-wallet support is a UI change only.
  */
 export function useWallets(options?: { enabled?: boolean }) {
-  const { isAuthenticated } = useSession()
+  const protectedEnabled = useProtectedQueryEnabled(options?.enabled ?? true)
 
   return useQuery({
     queryKey: queryKeys.wallets(),
     queryFn: ({ signal }) => api.wallets.list({ limit: 20 }, { signal }),
-    enabled: (options?.enabled ?? true) && isAuthenticated,
+    enabled: protectedEnabled,
     select: (page) => page.items,
   })
 }
@@ -48,12 +48,17 @@ export function isSyncInProgress(wallet: Wallet | undefined | null): boolean {
  */
 export function useWallet(
   walletId: string | null,
-  options?: Pick<UseQueryOptions<Wallet>, 'enabled'>,
+  options?: { enabled?: boolean },
 ) {
+  const extraEnabled = options?.enabled ?? true
+  const protectedEnabled = useProtectedQueryEnabled(
+    Boolean(walletId) && extraEnabled,
+  )
+
   return useQuery({
     queryKey: queryKeys.wallet(walletId ?? 'none'),
     queryFn: ({ signal }) => api.wallets.get(walletId as string, { signal }),
-    enabled: Boolean(walletId) && (options?.enabled ?? true),
+    enabled: protectedEnabled,
     refetchInterval: (query) =>
       isSyncInProgress(query.state.data) ? 1_200 : false,
     staleTime: 0,

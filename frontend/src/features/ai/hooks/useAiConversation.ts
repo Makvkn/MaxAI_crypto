@@ -11,6 +11,7 @@ import { AIIntent } from '@/api/types'
 import { analytics } from '@/lib/analytics/analytics'
 import { queryKeys } from '@/lib/query/queryKeys'
 import { useCursorInfiniteQuery } from '@/lib/query/useCursorInfiniteQuery'
+import { useProtectedQueryEnabled } from '@/features/auth/useProtectedQueryEnabled'
 import { runAiStream } from '../streaming/aiStreamClient'
 import { aiStreamReducer } from '../streaming/aiStreamReducer'
 import {
@@ -28,9 +29,11 @@ import {
  */
 
 export function useConversations(walletId: string, enabled = true) {
+  const protectedEnabled = useProtectedQueryEnabled(enabled)
+
   return useCursorInfiniteQuery<Conversation>({
     queryKey: queryKeys.conversations(walletId),
-    enabled,
+    enabled: protectedEnabled,
     fetchPage: ({ cursor, signal }) =>
       api.conversations.list({ wallet_id: walletId, cursor, limit: 20 }, { signal }),
   })
@@ -41,9 +44,13 @@ export function useConversationMessages(
   conversationId: string | null,
   enabled = true,
 ) {
+  const protectedEnabled = useProtectedQueryEnabled(
+    Boolean(conversationId) && enabled,
+  )
+
   const query = useCursorInfiniteQuery<ConversationMessage>({
     queryKey: queryKeys.messages(conversationId ?? 'none'),
-    enabled: Boolean(conversationId) && enabled,
+    enabled: protectedEnabled,
     staleTime: 10_000,
     fetchPage: ({ cursor, signal }) =>
       api.conversations.listMessages(
@@ -75,10 +82,12 @@ export function useCreateConversation(walletId: string) {
 }
 
 export function useAiUsage(enabled = true) {
+  const protectedEnabled = useProtectedQueryEnabled(enabled)
+
   return useQuery({
     queryKey: queryKeys.aiUsage(),
     queryFn: ({ signal }) => api.ai.getUsage({ signal }),
-    enabled,
+    enabled: protectedEnabled,
     staleTime: 30_000,
   })
 }

@@ -1,6 +1,14 @@
-import { useCallback, useMemo, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, tokenStore } from '@/api'
+import { resetAuthGate, syncAuthGate, waitForAuthReady } from '@/api/authGate'
 import type {
   AuthSession,
   EmailCredentials,
@@ -8,9 +16,20 @@ import type {
   User,
 } from '@/api/types'
 import { UserKind } from '@/api/types'
-import { queryKeys } from '@/lib/query/queryKeys'
 import { analytics } from '@/lib/analytics/analytics'
+import {
+  initialAuthStatus,
+  isAuthLoading,
+  isAuthReady,
+  isAuthenticatedStatus,
+  type AuthStatus,
+} from './authStatus'
 import { SessionContext, type SessionContextValue } from './sessionContext'
+import { createBootstrapEpoch } from './bootstrapEpoch'
+import {
+  runSessionBootstrap,
+  sessionQueryOptions,
+} from './sessionQueryOptions'
 import { useTokens } from './useTokens'
 
 /**
@@ -28,30 +47,64 @@ const toUser = (session: AuthSession): User => session.user
 /**
  * Session lifecycle.
  *
- * Tracks whether a session exists, resolves the current user through TanStack
- * Query and performs the transitions the product needs — including guest ->
- * registered upgrade, which preserves `user.id` server-side.
+ * AuthStatus drives authentication readiness. TanStack Query caches the
+ * current user but never defines whether bootstrap has finished.
  */
 export function SessionProvider({ children }: { children: ReactNode }) {
   const tokens = useTokens()
   const queryClient = useQueryClient()
 
-  const sessionQuery = useQuery({
-    queryKey: queryKeys.session(),
-    queryFn: ({ signal }) => api.auth.getCurrentUser({ signal }),
-    enabled: Boolean(tokens),
-    staleTime: 5 * 60_000,
-    retry: false,
+  const bootstrapEpoch = useRef(createBootstrapEpoch())
+  const [internalStatus, setInternalStatus] = useState<AuthStatus>(() =>
+    initialAuthStatus(Boolean(tokenStore.get())),
+  )
+  const authStatus: AuthStatus = !tokens ? 'unauthenticated' : internalStatus
+
+  const { data: user = null } = useQuery({
+    ...sessionQueryOptions(),
+    enabled: false,
   })
+
+  useEffect(() => {
+    syncAuthGate(authStatus)
+  }, [authStatus])
+
+  useEffect(() => {
+    if (!tokens) return
+    if (internalStatus === 'authenticated') return
+
+    if (internalStatus === 'unauthenticated') {
+      setInternalStatus('bootstrapping')
+      return
+    }
+
+    if (internalStatus !== 'bootstrapping') return
+
+    const attempt = bootstrapEpoch.current.start()
+
+    void runSessionBootstrap(queryClient)
+      .then(() => {
+        if (bootstrapEpoch.current.isCurrent(attempt)) {
+          setInternalStatus('authenticated')
+        }
+      })
+      .catch(() => {
+        if (bootstrapEpoch.current.isCurrent(attempt)) {
+          setInternalStatus('unauthenticated')
+        }
+      })
+  }, [tokens, internalStatus, queryClient])
 
   const adopt = useCallback(
     (session: AuthSession): User => {
+      bootstrapEpoch.current.invalidate()
       tokenStore.set({
         access_token: session.access_token,
         refresh_token: session.refresh_token,
         expires_at: session.expires_at,
       })
-      queryClient.setQueryData(queryKeys.session(), session.user)
+      queryClient.setQueryData(sessionQueryOptions().queryKey, session.user)
+      setInternalStatus('authenticated')
       analytics.identify(session.user.id, {
         kind: session.user.kind,
         plan: session.user.subscription.plan,
@@ -104,21 +157,26 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const logoutMutation = useMutation({
     mutationFn: () => api.auth.logout(),
     onSettled: () => {
+      bootstrapEpoch.current.invalidate()
       tokenStore.clear()
       queryClient.clear()
+      resetAuthGate()
+      setInternalStatus('unauthenticated')
     },
   })
 
-  const user = sessionQuery.data ?? null
+  const authReady = isAuthReady(authStatus)
+  const isAuthenticated = isAuthenticatedStatus(authStatus)
 
   const ensureSession = useCallback(async () => {
     if (user) return user
     if (tokens) {
-      const existing = await queryClient.fetchQuery({
-        queryKey: queryKeys.session(),
-        queryFn: ({ signal }) => api.auth.getCurrentUser({ signal }),
-      })
-      return existing
+      await waitForAuthReady()
+      const cached = queryClient.getQueryData<User>(
+        sessionQueryOptions().queryKey,
+      )
+      if (cached) return cached
+      return runSessionBootstrap(queryClient)
     }
     const session = await guestMutation.mutateAsync()
     return session.user
@@ -127,9 +185,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const value = useMemo<SessionContextValue>(
     () => ({
       user,
-      isAuthenticated: Boolean(tokens),
+      authReady,
+      isAuthenticated,
       isGuest: user?.kind === UserKind.GUEST,
-      isLoading: Boolean(tokens) && sessionQuery.isLoading,
+      isLoading: isAuthLoading(authStatus),
       ensureSession,
       signInWithEmail: (credentials) =>
         emailLoginMutation.mutateAsync(credentials).then(toUser),
@@ -155,14 +214,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         upgradeMutation.isPending,
     }),
     [
+      authReady,
+      authStatus,
       ensureSession,
       emailLoginMutation,
       emailRegisterMutation,
       googleMutation,
       guestMutation,
+      isAuthenticated,
       logoutMutation,
-      sessionQuery.isLoading,
-      tokens,
       upgradeMutation,
       user,
     ],

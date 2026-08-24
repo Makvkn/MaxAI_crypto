@@ -69,6 +69,11 @@ export interface AuthApi {
   ): Promise<AuthSession>
   /** Resolves the current user from the stored access token. */
   getCurrentUser(options?: RequestOptions): Promise<User>
+  /**
+   * Bootstraps auth on app start: refreshes an expired access token when
+   * needed, then validates the session. Protected queries should wait for this.
+   */
+  initializeSession(options?: RequestOptions): Promise<User>
   logout(options?: RequestOptions): Promise<void>
 }
 

@@ -259,6 +259,19 @@ function createAuth(db: MockDb): MaxAIApi['auth'] {
       return session.user
     },
 
+    async initializeSession(options) {
+      await delay(120, options?.signal)
+      const session = db.session
+      if (!session) {
+        throw new ApiError({
+          code: ApiErrorCode.AUTHENTICATION_ERROR,
+          message: 'No active session.',
+          status: 401,
+        })
+      }
+      return session.user
+    },
+
     async logout(options) {
       await delay(120, options?.signal)
       db.setSession(null)
