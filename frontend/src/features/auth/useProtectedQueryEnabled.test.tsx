@@ -17,7 +17,7 @@ function baseSession(
 ): SessionContextValue {
   return {
     user: null,
-    isAuthInitialized: false,
+    authReady: false,
     isAuthenticated: false,
     isGuest: false,
     isLoading: true,
@@ -46,11 +46,11 @@ function baseSession(
 }
 
 describe('useProtectedQueryEnabled', () => {
-  it('is disabled while auth initialization is in progress', () => {
+  it('is disabled while auth bootstrap is in progress', () => {
     const { result } = renderHook(() => useProtectedQueryEnabled(true), {
       wrapper: wrapper(
         baseSession({
-          isAuthInitialized: false,
+          authReady: false,
           isAuthenticated: false,
           isLoading: true,
         }),
@@ -60,11 +60,11 @@ describe('useProtectedQueryEnabled', () => {
     expect(result.current).toBe(false)
   })
 
-  it('is disabled for guests without a validated session', () => {
+  it('is disabled when bootstrap finished without a session', () => {
     const { result } = renderHook(() => useProtectedQueryEnabled(true), {
       wrapper: wrapper(
         baseSession({
-          isAuthInitialized: true,
+          authReady: true,
           isAuthenticated: false,
           isLoading: false,
         }),
@@ -74,11 +74,11 @@ describe('useProtectedQueryEnabled', () => {
     expect(result.current).toBe(false)
   })
 
-  it('is enabled after auth initialization succeeds', () => {
+  it('is enabled after bootstrap succeeds', () => {
     const { result } = renderHook(() => useProtectedQueryEnabled(true), {
       wrapper: wrapper(
         baseSession({
-          isAuthInitialized: true,
+          authReady: true,
           isAuthenticated: true,
           isLoading: false,
         }),
@@ -88,11 +88,26 @@ describe('useProtectedQueryEnabled', () => {
     expect(result.current).toBe(true)
   })
 
+  it('stays disabled with cached user during bootstrap', () => {
+    const { result } = renderHook(() => useProtectedQueryEnabled(true), {
+      wrapper: wrapper(
+        baseSession({
+          user: { id: 'cached-user' } as SessionContextValue['user'],
+          authReady: false,
+          isAuthenticated: false,
+          isLoading: true,
+        }),
+      ),
+    })
+
+    expect(result.current).toBe(false)
+  })
+
   it('respects an additional enabled=false condition', () => {
     const { result } = renderHook(() => useProtectedQueryEnabled(false), {
       wrapper: wrapper(
         baseSession({
-          isAuthInitialized: true,
+          authReady: true,
           isAuthenticated: true,
           isLoading: false,
         }),

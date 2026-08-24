@@ -1,37 +1,54 @@
 /**
- * Coordinates auth bootstrap across React Query and HttpClient.
+ * Defensive HTTP barrier synced from AuthStatus.
  *
- * Protected HTTP requests wait here until session validation (including any
- * startup refresh) completes. Reactive 401 refresh stays unchanged.
+ * Protected requests wait here until auth bootstrap completes. This is not the
+ * primary application lifecycle — SessionProvider owns AuthStatus and calls
+ * syncAuthGate on every transition.
  */
+
+export type GateAuthStatus =
+  | 'bootstrapping'
+  | 'authenticated'
+  | 'unauthenticated'
 
 let ready = false
 let bootstrapping = false
 const waiters = new Set<() => void>()
 
-function flushWaiters() {
+function flushWaiters(): void {
   for (const resolve of waiters) resolve()
   waiters.clear()
 }
 
-/** Allows authenticated requests again (guest / signed-out visitors). */
-export function markAuthReady(): void {
-  ready = true
-  bootstrapping = false
-  flushWaiters()
-}
-
-/** Blocks authenticated requests until bootstrap finishes. */
-export function markAuthPending(): void {
+function closeGate(): void {
   ready = false
 }
 
-/** True while initializeSession is running. */
+function openGate(): void {
+  ready = true
+  flushWaiters()
+}
+
+/** Keeps the HTTP gate aligned with the auth lifecycle state machine. */
+export function syncAuthGate(status: GateAuthStatus): void {
+  switch (status) {
+    case 'bootstrapping':
+      closeGate()
+      break
+    case 'authenticated':
+    case 'unauthenticated':
+      openGate()
+      break
+  }
+}
+
+/** True while initializeSession runs inside runAuthBootstrap. */
 export function isAuthBootstrapping(): boolean {
   return bootstrapping
 }
 
-export function isAuthReady(): boolean {
+/** @internal Tests and diagnostics only — prefer SessionContext.authReady. */
+export function isAuthGateOpen(): boolean {
   return ready
 }
 
@@ -42,19 +59,20 @@ export function waitForAuthReady(): Promise<void> {
   })
 }
 
-/** Runs startup session validation with the HTTP gate lifted. */
+/**
+ * Lifts the HTTP gate for internal bootstrap requests so initializeSession
+ * cannot deadlock on waitForAuthReady.
+ */
 export async function runAuthBootstrap<T>(task: () => Promise<T>): Promise<T> {
   bootstrapping = true
-  markAuthPending()
   try {
     return await task()
   } finally {
     bootstrapping = false
-    markAuthReady()
   }
 }
 
-/** Called on logout so the next visitor starts from a clean gate. */
+/** Clears waiters on logout before the next lifecycle begins. */
 export function resetAuthGate(): void {
   ready = false
   bootstrapping = false

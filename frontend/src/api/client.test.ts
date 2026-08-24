@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { HttpClient, isAccessTokenExpired } from './client'
-import { markAuthReady, resetAuthGate } from './authGate'
+import { resetAuthGate, syncAuthGate } from './authGate'
 import { createTokenStore, type StoredTokens } from './tokenStore'
 
 function futureExpiry(): string {
@@ -33,12 +33,12 @@ describe('isAccessTokenExpired', () => {
 describe('HttpClient.ensureValidAccessToken', () => {
   beforeEach(() => {
     resetAuthGate()
-    markAuthReady()
+    syncAuthGate('authenticated')
   })
 
   afterEach(() => {
     resetAuthGate()
-    markAuthReady()
+    syncAuthGate('authenticated')
     vi.restoreAllMocks()
   })
 

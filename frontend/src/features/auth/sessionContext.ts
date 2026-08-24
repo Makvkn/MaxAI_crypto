@@ -11,11 +11,11 @@ import type { EmailCredentials, User } from '@/api/types'
 export interface SessionContextValue {
   user: User | null
   /** True once auth bootstrap has settled (authenticated or signed out). */
-  isAuthInitialized: boolean
-  /** True when a validated session exists after initialization. */
+  authReady: boolean
+  /** True when a validated session exists after bootstrap. */
   isAuthenticated: boolean
   isGuest: boolean
-  /** True while stored tokens are being validated or recovered. */
+  /** True while the current bootstrap attempt is in progress. */
   isLoading: boolean
   /** Creates an anonymous account if none exists yet. */
   ensureSession: () => Promise<User>
