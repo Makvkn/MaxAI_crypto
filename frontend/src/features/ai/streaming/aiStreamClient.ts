@@ -1,4 +1,4 @@
-import { api } from '@/api'
+import { apiStreamConversationMessage } from '@/api'
 import { isCancelledError, normalizeUnknownError, toErrorBody } from '@/api/errors'
 import type { AIStreamEvent, SendMessageRequest } from '@/api/types'
 
@@ -23,7 +23,7 @@ export async function runAiStream({
   onEvent,
 }: AiStreamRunner): Promise<void> {
   try {
-    const stream = api.conversations.streamMessage(conversationId, request, {
+    const stream = apiStreamConversationMessage({ conversationId }, request, {
       signal,
     })
 

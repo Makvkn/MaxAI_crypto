@@ -53,7 +53,10 @@ function readBoolean(key: string, fallback: boolean): boolean {
   return fallback
 }
 
-const apiMode = readEnum('VITE_API_MODE', ['mock', 'real'] as const, 'mock')
+const apiMode =
+  import.meta.env.MODE === 'test'
+    ? 'mock'
+    : readEnum('VITE_API_MODE', ['mock', 'real'] as const, 'mock')
 /** Empty means same-origin, which the dev proxy relies on. */
 const apiBaseUrl = readString('VITE_API_BASE_URL', '')
 const apiTimeoutMs = readPositiveInt('VITE_API_TIMEOUT_MS', 15_000)

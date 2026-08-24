@@ -1,5 +1,5 @@
-import type { HttpClient } from '../client'
-import type { AiUsageApi } from '../contract'
+import type { RequestOptions } from '../client'
+import { http } from '../http'
 import type { AIUsage } from '../types'
 
 /**
@@ -8,8 +8,5 @@ import type { AIUsage } from '../types'
  * Display only. The daily limit is enforced by the backend; a client-side
  * counter is never treated as protection.
  */
-export function createAiUsageApi(http: HttpClient): AiUsageApi {
-  return {
-    getUsage: (options) => http.get<AIUsage>('/ai/usage', undefined, options),
-  }
-}
+export const apiGetAiUsage = (options?: RequestOptions): Promise<AIUsage> =>
+  http.get<AIUsage>('/ai/usage', undefined, options)

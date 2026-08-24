@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/api'
+import { apiSimulateScenario } from '@/api'
 import { ScenarioType, type ScenarioResult } from '@/api/types'
 import { analytics } from '@/lib/analytics/analytics'
 import { queryKeys } from '@/lib/query/queryKeys'
@@ -20,7 +20,7 @@ export function useScenarioSimulation(walletId: string) {
     { assetId: string; assetSymbol: string; changePct: string }
   >({
     mutationFn: ({ assetId, changePct }) =>
-      api.scenarios.simulate({
+      apiSimulateScenario({
         wallet_id: walletId,
         type: ScenarioType.ASSET_PRICE_CHANGE,
         asset_id: assetId,

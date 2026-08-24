@@ -32,6 +32,19 @@ export interface CursorParams {
   cursor?: Cursor | null
 }
 
+/** Path parameter objects for resource URLs. */
+export interface WalletIdPath {
+  walletId: string
+}
+
+export interface ConversationIdPath {
+  conversationId: string
+}
+
+export interface TransactionIdPath {
+  transactionId: string
+}
+
 /**
  * The single pagination envelope used by the API. The backend uses
  * cursor-based pagination exclusively — there is no page/offset concept.

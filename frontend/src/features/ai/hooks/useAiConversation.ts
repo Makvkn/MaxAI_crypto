@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/api'
+import {
+  apiCreateConversation,
+  apiGetAiUsage,
+  apiGetConversationMessages,
+  apiGetConversations,
+} from '@/api'
 import type {
   AIUsage,
   Conversation,
@@ -35,7 +40,7 @@ export function useConversations(walletId: string, enabled = true) {
     queryKey: queryKeys.conversations(walletId),
     enabled: protectedEnabled,
     fetchPage: ({ cursor, signal }) =>
-      api.conversations.list({ wallet_id: walletId, cursor, limit: 20 }, { signal }),
+      apiGetConversations({ wallet_id: walletId, cursor, limit: 20 }, { signal }),
   })
 }
 
@@ -53,8 +58,8 @@ export function useConversationMessages(
     enabled: protectedEnabled,
     staleTime: 10_000,
     fetchPage: ({ cursor, signal }) =>
-      api.conversations.listMessages(
-        conversationId as string,
+      apiGetConversationMessages(
+        { conversationId: conversationId as string },
         { cursor, limit: 30 },
         { signal },
       ),
@@ -72,7 +77,7 @@ export function useCreateConversation(walletId: string) {
 
   return useMutation({
     mutationFn: (title?: string) =>
-      api.conversations.create({ wallet_id: walletId, title }),
+      apiCreateConversation({ wallet_id: walletId, title }),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.conversations(walletId),
@@ -86,7 +91,7 @@ export function useAiUsage(enabled = true) {
 
   return useQuery({
     queryKey: queryKeys.aiUsage(),
-    queryFn: ({ signal }) => api.ai.getUsage({ signal }),
+    queryFn: ({ signal }) => apiGetAiUsage({ signal }),
     enabled: protectedEnabled,
     staleTime: 30_000,
   })
@@ -141,7 +146,7 @@ export function useAiStream({
 
       try {
         if (!targetConversationId) {
-          const conversation = await api.conversations.create({
+          const conversation = await apiCreateConversation({
             wallet_id: walletId,
             title: request.content.slice(0, 60),
           })

@@ -99,3 +99,7 @@ export function createTokenStore(storageKey = STORAGE_KEY): TokenStore {
     },
   }
 }
+
+/** Application-wide session tokens. */
+export const tokenStore: TokenStore = createTokenStore()
+

@@ -1,4 +1,4 @@
-import type { MaxAIApi } from '../contract'
+import type { RequestOptions } from '../client'
 import { ApiError } from '../errors'
 import {
   AIIntent,
@@ -15,11 +15,26 @@ import {
   type AIStreamEvent,
   type AIUsage,
   type AuthSession,
+  type Conversation,
+  type ConversationListParams,
   type ConversationMessage,
+  type CreateConversationRequest,
+  type CreateWalletRequest,
   type CursorPage,
+  type CursorParams,
+  type EmailCredentials,
+  type GoogleAuthRequest,
+  type MessageListParams,
+  type PerformancePeriod as PerformancePeriodValue,
+  type PortfolioPerformance,
   type Portfolio,
+  type ScenarioRequest,
   type ScenarioResult,
+  type SendMessageRequest,
   type Transaction,
+  type TransactionListParams,
+  type UpgradeAccountRequest,
+  type User,
   type Wallet,
 } from '../types'
 import { buildAiResponse, resolveIntent, toolsForIntent } from './data/ai'
@@ -34,10 +49,9 @@ import { resolveVariant } from './variants'
 /**
  * In-memory MaxAI backend.
  *
- * This adapter implements the exact same `MaxAIApi` contract as the HTTP
- * adapter, using the exact same DTO types. Nothing above `src/api` can tell
- * which one is active, which is what makes `VITE_API_MODE=real` a
- * configuration change rather than a refactor.
+ * This adapter reproduces the frontend endpoint functions against an in-memory
+ * backend. Switching `VITE_API_MODE` changes runtime behaviour without
+ * changing feature code.
  *
  * It deliberately reproduces the awkward parts of the real system:
  * asynchronous wallet sync, cursor pagination, partial and stale data,
@@ -48,7 +62,88 @@ const PAGE_SIZE = 50
 const AI_STREAM_CHUNK_MS = 26
 const AI_TOOL_MS = 320
 
-export function createMockApi(): MaxAIApi {
+interface MockApi {
+  auth: {
+    createGuestSession(options?: RequestOptions): Promise<AuthSession>
+    registerWithEmail(
+      credentials: EmailCredentials,
+      options?: RequestOptions,
+    ): Promise<AuthSession>
+    loginWithEmail(
+      credentials: EmailCredentials,
+      options?: RequestOptions,
+    ): Promise<AuthSession>
+    loginWithGoogle(
+      request: GoogleAuthRequest,
+      options?: RequestOptions,
+    ): Promise<AuthSession>
+    upgradeAccount(
+      request: UpgradeAccountRequest,
+      options?: RequestOptions,
+    ): Promise<AuthSession>
+    getCurrentUser(options?: RequestOptions): Promise<User>
+    initializeSession(options?: RequestOptions): Promise<User>
+    logout(options?: RequestOptions): Promise<void>
+  }
+  wallets: {
+    list(params?: CursorParams, options?: RequestOptions): Promise<CursorPage<Wallet>>
+    get(walletId: string, options?: RequestOptions): Promise<Wallet>
+    create(request: CreateWalletRequest, options?: RequestOptions): Promise<Wallet>
+  }
+  portfolio: {
+    get(walletId: string, options?: RequestOptions): Promise<Portfolio>
+  }
+  performance: {
+    get(
+      walletId: string,
+      period: PerformancePeriodValue,
+      options?: RequestOptions,
+    ): Promise<PortfolioPerformance>
+  }
+  transactions: {
+    list(
+      walletId: string,
+      params?: TransactionListParams,
+      options?: RequestOptions,
+    ): Promise<CursorPage<Transaction>>
+    get(
+      walletId: string,
+      transactionId: string,
+      options?: RequestOptions,
+    ): Promise<Transaction>
+  }
+  conversations: {
+    list(
+      params?: ConversationListParams,
+      options?: RequestOptions,
+    ): Promise<CursorPage<Conversation>>
+    create(
+      request: CreateConversationRequest,
+      options?: RequestOptions,
+    ): Promise<Conversation>
+    listMessages(
+      conversationId: string,
+      params?: MessageListParams,
+      options?: RequestOptions,
+    ): Promise<CursorPage<ConversationMessage>>
+    streamMessage(
+      conversationId: string,
+      request: SendMessageRequest,
+      options?: { signal?: AbortSignal },
+    ): AsyncIterable<AIStreamEvent>
+  }
+  ai: {
+    getUsage(options?: RequestOptions): Promise<AIUsage>
+  }
+  scenarios: {
+    simulate(
+      request: ScenarioRequest,
+      options?: RequestOptions,
+    ): Promise<ScenarioResult>
+  }
+}
+
+export function createMockApi(): MockApi {
   const db = createMockDb()
 
   return {
@@ -197,7 +292,7 @@ export function createMockApi(): MaxAIApi {
 /* Auth                                                                       */
 /* -------------------------------------------------------------------------- */
 
-function createAuth(db: MockDb): MaxAIApi['auth'] {
+function createAuth(db: MockDb): MockApi['auth'] {
   const toSession = (session: ReturnType<MockDb['issueSession']>): AuthSession => ({
     access_token: session.access_token,
     refresh_token: session.refresh_token,

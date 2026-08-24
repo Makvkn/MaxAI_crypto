@@ -1,6 +1,6 @@
-import type { HttpClient } from '../client'
-import type { ScenariosApi } from '../contract'
-import type { ScenarioResult } from '../types'
+import type { RequestOptions } from '../client'
+import { http } from '../http'
+import type { ScenarioRequest, ScenarioResult } from '../types'
 
 /**
  * `POST /api/v1/ai/scenarios`
@@ -8,9 +8,8 @@ import type { ScenarioResult } from '../types'
  * The backend runs the deterministic calculation and attaches the AI
  * explanation. No part of the scenario is computed in the browser.
  */
-export function createScenariosApi(http: HttpClient): ScenariosApi {
-  return {
-    simulate: (request, options) =>
-      http.post<ScenarioResult>('/ai/scenarios', request, options),
-  }
-}
+export const apiSimulateScenario = (
+  request: ScenarioRequest,
+  options?: RequestOptions,
+): Promise<ScenarioResult> =>
+  http.post<ScenarioResult>('/ai/scenarios', request, options)

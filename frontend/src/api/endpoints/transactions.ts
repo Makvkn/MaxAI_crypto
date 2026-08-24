@@ -1,30 +1,40 @@
-import type { HttpClient } from '../client'
-import type { TransactionsApi } from '../contract'
-import type { CursorPage, Transaction } from '../types'
+import type { RequestOptions } from '../client'
+import { http } from '../http'
+import type {
+  CursorPage,
+  Transaction,
+  TransactionIdPath,
+  TransactionListParams,
+  WalletIdPath,
+} from '../types'
 
 /**
  * `GET /api/v1/wallets/:id/transactions`
  *
  * Cursor pagination only — there is no page/offset parameter.
  */
-export function createTransactionsApi(http: HttpClient): TransactionsApi {
-  return {
-    list: (walletId, params, options) =>
-      http.get<CursorPage<Transaction>>(
-        `/wallets/${encodeURIComponent(walletId)}/transactions`,
-        {
-          limit: params?.limit,
-          cursor: params?.cursor,
-          type: params?.type,
-        },
-        options,
-      ),
 
-    get: (walletId, transactionId, options) =>
-      http.get<Transaction>(
-        `/wallets/${encodeURIComponent(walletId)}/transactions/${encodeURIComponent(transactionId)}`,
-        undefined,
-        options,
-      ),
-  }
-}
+export const apiGetTransactions = (
+  { walletId }: WalletIdPath,
+  params?: TransactionListParams,
+  options?: RequestOptions,
+): Promise<CursorPage<Transaction>> =>
+  http.get<CursorPage<Transaction>>(
+    `/wallets/${encodeURIComponent(walletId)}/transactions`,
+    {
+      limit: params?.limit,
+      cursor: params?.cursor,
+      type: params?.type,
+    },
+    options,
+  )
+
+export const apiGetTransaction = (
+  { walletId, transactionId }: WalletIdPath & TransactionIdPath,
+  options?: RequestOptions,
+): Promise<Transaction> =>
+  http.get<Transaction>(
+    `/wallets/${encodeURIComponent(walletId)}/transactions/${encodeURIComponent(transactionId)}`,
+    undefined,
+    options,
+  )

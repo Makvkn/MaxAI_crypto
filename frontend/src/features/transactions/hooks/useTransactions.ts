@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { api } from '@/api'
+import { apiGetTransaction, apiGetTransactions } from '@/api'
 import type { Transaction, TransactionType } from '@/api/types'
 import { queryKeys } from '@/lib/query/queryKeys'
 import { useCursorInfiniteQuery } from '@/lib/query/useCursorInfiniteQuery'
@@ -22,8 +22,8 @@ export function useTransactions(
     queryKey: queryKeys.transactions(walletId, { type: params?.type }),
     enabled: protectedEnabled,
     fetchPage: ({ cursor, signal }) =>
-      api.transactions.list(
-        walletId,
+      apiGetTransactions(
+        { walletId },
         { cursor, limit, type: params?.type },
         { signal },
       ),
@@ -39,7 +39,10 @@ export function useTransaction(
   return useQuery({
     queryKey: queryKeys.transaction(walletId, transactionId ?? 'none'),
     queryFn: ({ signal }) =>
-      api.transactions.get(walletId, transactionId as string, { signal }),
+      apiGetTransaction(
+        { walletId, transactionId: transactionId as string },
+        { signal },
+      ),
     enabled: protectedEnabled,
     staleTime: 5 * 60_000,
   })

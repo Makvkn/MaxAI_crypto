@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { MaxAIApi } from '../contract'
 import { ApiError } from '../errors'
 import {
   ApiErrorCode,
@@ -27,7 +26,7 @@ const FAILING = '0xfail0000000000000000000000000000000000001'
 const SYNC_MS = 12_000
 
 describe('mock API', () => {
-  let api: MaxAIApi
+  let api: ReturnType<typeof createMockApi>
 
   beforeEach(() => {
     vi.useFakeTimers()

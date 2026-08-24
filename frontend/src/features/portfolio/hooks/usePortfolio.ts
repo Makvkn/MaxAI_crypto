@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/api'
+import { apiGetPortfolio } from '@/api'
 import { queryKeys } from '@/lib/query/queryKeys'
 import { useProtectedQueryEnabled } from '@/features/auth/useProtectedQueryEnabled'
 
@@ -16,7 +16,7 @@ export function usePortfolio(walletId: string, options?: { enabled?: boolean }) 
 
   return useQuery({
     queryKey: queryKeys.portfolio(walletId),
-    queryFn: ({ signal }) => api.portfolio.get(walletId, { signal }),
+    queryFn: ({ signal }) => apiGetPortfolio({ walletId }, { signal }),
     enabled: protectedEnabled,
     staleTime: 60_000,
   })
