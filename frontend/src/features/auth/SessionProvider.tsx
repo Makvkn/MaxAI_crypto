@@ -1,6 +1,13 @@
-import { useCallback, useMemo, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, tokenStore } from '@/api'
+import {
+  markAuthPending,
+  markAuthReady,
+  resetAuthGate,
+  runAuthBootstrap,
+  waitForAuthReady,
+} from '@/api/authGate'
 import type {
   AuthSession,
   EmailCredentials,
@@ -38,11 +45,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const sessionQuery = useQuery({
     queryKey: queryKeys.session(),
-    queryFn: ({ signal }) => api.auth.getCurrentUser({ signal }),
+    queryFn: ({ signal }) =>
+      runAuthBootstrap(() => api.auth.initializeSession({ signal })),
     enabled: Boolean(tokens),
     staleTime: 5 * 60_000,
     retry: false,
+    refetchOnMount: 'always',
   })
+
+  useEffect(() => {
+    if (!tokens) {
+      markAuthReady()
+      return
+    }
+    markAuthPending()
+  }, [tokens])
 
   const adopt = useCallback(
     (session: AuthSession): User => {
@@ -52,6 +69,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         expires_at: session.expires_at,
       })
       queryClient.setQueryData(queryKeys.session(), session.user)
+      markAuthReady()
       analytics.identify(session.user.id, {
         kind: session.user.kind,
         plan: session.user.subscription.plan,
@@ -105,20 +123,31 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     mutationFn: () => api.auth.logout(),
     onSettled: () => {
       tokenStore.clear()
+      resetAuthGate()
+      markAuthReady()
       queryClient.clear()
     },
   })
 
   const user = sessionQuery.data ?? null
+  const isAuthInitialized =
+    !tokens ||
+    (sessionQuery.isFetched &&
+      sessionQuery.fetchStatus === 'idle' &&
+      !sessionQuery.isFetching)
+  const isAuthenticated =
+    isAuthInitialized && Boolean(tokens) && sessionQuery.isSuccess
 
   const ensureSession = useCallback(async () => {
     if (user) return user
     if (tokens) {
-      const existing = await queryClient.fetchQuery({
+      await waitForAuthReady()
+      const cached = queryClient.getQueryData<User>(queryKeys.session())
+      if (cached) return cached
+      return queryClient.fetchQuery({
         queryKey: queryKeys.session(),
-        queryFn: ({ signal }) => api.auth.getCurrentUser({ signal }),
+        queryFn: ({ signal }) => api.auth.initializeSession({ signal }),
       })
-      return existing
     }
     const session = await guestMutation.mutateAsync()
     return session.user
@@ -127,9 +156,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const value = useMemo<SessionContextValue>(
     () => ({
       user,
-      isAuthenticated: Boolean(tokens),
+      isAuthInitialized,
+      isAuthenticated,
       isGuest: user?.kind === UserKind.GUEST,
-      isLoading: Boolean(tokens) && sessionQuery.isLoading,
+      isLoading: Boolean(tokens) && !isAuthInitialized,
       ensureSession,
       signInWithEmail: (credentials) =>
         emailLoginMutation.mutateAsync(credentials).then(toUser),
@@ -161,7 +191,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       googleMutation,
       guestMutation,
       logoutMutation,
-      sessionQuery.isLoading,
+      isAuthInitialized,
+      isAuthenticated,
       tokens,
       upgradeMutation,
       user,

@@ -5,6 +5,10 @@ import {
 } from './errors'
 import type { StoredTokens, TokenStore } from './tokenStore'
 import { ApiErrorCode } from './types'
+import {
+  isAuthBootstrapping,
+  waitForAuthReady,
+} from './authGate'
 
 /**
  * The single HTTP boundary of the application.
@@ -53,6 +57,17 @@ export class HttpClient {
 
   setRefreshHandler(handler: RefreshHandler | null): void {
     this.refreshHandler = handler
+  }
+
+  /**
+   * Proactively rotates an expired access token before the first protected call.
+   * Uses the same single-flight refresh as reactive 401 handling.
+   */
+  async ensureValidAccessToken(): Promise<boolean> {
+    const tokens = this.config.tokens.get()
+    if (!tokens) return false
+    if (!isAccessTokenExpired(tokens.expires_at)) return true
+    return this.tryRefresh()
   }
 
   get<T>(
@@ -126,6 +141,11 @@ export class HttpClient {
   ): Promise<Response> {
     const url = this.buildUrl(request.path, request.query)
     const withAuth = request.auth !== false
+
+    if (withAuth && this.config.tokens.get() && !isAuthBootstrapping()) {
+      await waitForAuthReady()
+    }
+
     const headers = new Headers({ Accept: 'application/json', ...extraHeaders })
 
     if (request.body !== undefined) {
@@ -216,6 +236,16 @@ export class HttpClient {
       })
     }
   }
+}
+
+/** Small skew so refresh happens slightly before the server rejects the token. */
+export function isAccessTokenExpired(
+  expiresAt: string,
+  skewMs = 30_000,
+): boolean {
+  const expires = Date.parse(expiresAt)
+  if (Number.isNaN(expires)) return false
+  return Date.now() >= expires - skewMs
 }
 
 function mapTimeout(error: unknown, timeoutMs: number): unknown {

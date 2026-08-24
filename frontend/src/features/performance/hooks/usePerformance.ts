@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '@/api'
 import type { PerformancePeriod } from '@/api/types'
 import { queryKeys } from '@/lib/query/queryKeys'
+import { useProtectedQueryEnabled } from '@/features/auth/useProtectedQueryEnabled'
 
 /**
  * Snapshot-based performance for a period.
@@ -14,10 +15,12 @@ export function usePerformance(
   period: PerformancePeriod,
   options?: { enabled?: boolean },
 ) {
+  const protectedEnabled = useProtectedQueryEnabled(options?.enabled ?? true)
+
   return useQuery({
     queryKey: queryKeys.performance(walletId, period),
     queryFn: ({ signal }) => api.performance.get(walletId, period, { signal }),
-    enabled: options?.enabled ?? true,
+    enabled: protectedEnabled,
     staleTime: 60_000,
   })
 }
