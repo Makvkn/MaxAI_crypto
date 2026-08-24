@@ -49,14 +49,8 @@ vi.mock('@/api', async () => {
   const actual = await vi.importActual<typeof import('@/api')>('@/api')
   return {
     ...actual,
-    api: {
-      ...actual.api,
-      auth: {
-        ...actual.api.auth,
-        logout: vi.fn().mockResolvedValue(undefined),
-        loginWithEmail: vi.fn().mockResolvedValue(signedInSession),
-      },
-    },
+    apiLogout: vi.fn().mockResolvedValue(undefined),
+    apiLoginWithEmail: vi.fn().mockResolvedValue(signedInSession),
   }
 })
 

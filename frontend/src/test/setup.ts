@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { afterEach, beforeEach, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
+import { resetMockApi, tokenStore } from '@/api'
 
 /**
  * Node exposes a disabled `localStorage` global that shadows jsdom's, so tests
@@ -30,6 +31,8 @@ if (!globalThis.localStorage) {
 
 // jsdom lacks the observers and matchMedia that layout components rely on.
 beforeEach(() => {
+  tokenStore.clear()
+  resetMockApi()
   vi.stubGlobal(
     'matchMedia',
     vi.fn((query: string) => ({
@@ -56,5 +59,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  tokenStore.clear()
+  resetMockApi()
   localStorage.clear()
 })

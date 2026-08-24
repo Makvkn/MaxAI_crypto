@@ -1,12 +1,17 @@
-import type { HttpClient } from '../client'
-import type { ConversationsApi } from '../contract'
+import type { RequestOptions } from '../client'
 import { isCancelledError, normalizeUnknownError, toErrorBody } from '../errors'
+import { http } from '../http'
 import { parseSseData, readSseFrames, type SseFrame } from '../sse'
 import type {
   AIStreamEvent,
   Conversation,
+  ConversationIdPath,
+  ConversationListParams,
   ConversationMessage,
+  CreateConversationRequest,
   CursorPage,
+  MessageListParams,
+  SendMessageRequest,
 } from '../types'
 
 /**
@@ -16,39 +21,49 @@ import type {
  * typed domain events; unknown event types are skipped so the backend can add
  * events without breaking the client.
  */
-export function createConversationsApi(http: HttpClient): ConversationsApi {
-  return {
-    list: (params, options) =>
-      http.get<CursorPage<Conversation>>(
-        '/ai/conversations',
-        {
-          wallet_id: params?.wallet_id,
-          limit: params?.limit,
-          cursor: params?.cursor,
-        },
-        options,
-      ),
 
-    create: (request, options) =>
-      http.post<Conversation>('/ai/conversations', request, options),
-
-    listMessages: (conversationId, params, options) =>
-      http.get<CursorPage<ConversationMessage>>(
-        `/ai/conversations/${encodeURIComponent(conversationId)}/messages`,
-        { limit: params?.limit, cursor: params?.cursor },
-        options,
-      ),
-
-    streamMessage(conversationId, request, options) {
-      return streamMessage(http, conversationId, request, options)
+export const apiGetConversations = (
+  params?: ConversationListParams,
+  options?: RequestOptions,
+): Promise<CursorPage<Conversation>> =>
+  http.get<CursorPage<Conversation>>(
+    '/ai/conversations',
+    {
+      wallet_id: params?.wallet_id,
+      limit: params?.limit,
+      cursor: params?.cursor,
     },
-  }
+    options,
+  )
+
+export const apiCreateConversation = (
+  request: CreateConversationRequest,
+  options?: RequestOptions,
+): Promise<Conversation> =>
+  http.post<Conversation>('/ai/conversations', request, options)
+
+export const apiGetConversationMessages = (
+  { conversationId }: ConversationIdPath,
+  params?: MessageListParams,
+  options?: RequestOptions,
+): Promise<CursorPage<ConversationMessage>> =>
+  http.get<CursorPage<ConversationMessage>>(
+    `/ai/conversations/${encodeURIComponent(conversationId)}/messages`,
+    { limit: params?.limit, cursor: params?.cursor },
+    options,
+  )
+
+export function apiStreamConversationMessage(
+  { conversationId }: ConversationIdPath,
+  request: SendMessageRequest,
+  options?: { signal?: AbortSignal },
+): AsyncGenerator<AIStreamEvent> {
+  return readConversationMessageStream(conversationId, request, options)
 }
 
-async function* streamMessage(
-  http: HttpClient,
+async function* readConversationMessageStream(
   conversationId: string,
-  request: unknown,
+  request: SendMessageRequest,
   options?: { signal?: AbortSignal },
 ): AsyncGenerator<AIStreamEvent> {
   try {
@@ -59,7 +74,7 @@ async function* streamMessage(
     )
 
     for await (const frame of readSseFrames(response)) {
-      const event = toStreamEvent(frame)
+      const event = parseConversationStreamEvent(frame)
       if (!event) continue
       yield event
       if (event.type === 'completed' || event.type === 'error') return
@@ -84,7 +99,7 @@ const STREAM_EVENT_TYPES = new Set<AIStreamEvent['type']>([
  * Accepts the event name either from the SSE `event:` field or from a `type`
  * property inside the JSON payload.
  */
-function toStreamEvent(frame: SseFrame): AIStreamEvent | null {
+function parseConversationStreamEvent(frame: SseFrame): AIStreamEvent | null {
   const payload = parseSseData<Record<string, unknown>>(frame)
   if (!payload) return null
 

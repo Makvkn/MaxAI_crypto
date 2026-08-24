@@ -3,7 +3,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import { api } from '@/api'
+import { apiCreateWallet, apiGetWallet, apiGetWallets } from '@/api'
 import {
   SyncStatus,
   type CreateWalletRequest,
@@ -25,7 +25,7 @@ export function useWallets(options?: { enabled?: boolean }) {
 
   return useQuery({
     queryKey: queryKeys.wallets(),
-    queryFn: ({ signal }) => api.wallets.list({ limit: 20 }, { signal }),
+    queryFn: ({ signal }) => apiGetWallets({ limit: 20 }, { signal }),
     enabled: protectedEnabled,
     select: (page) => page.items,
   })
@@ -57,7 +57,7 @@ export function useWallet(
 
   return useQuery({
     queryKey: queryKeys.wallet(walletId ?? 'none'),
-    queryFn: ({ signal }) => api.wallets.get(walletId as string, { signal }),
+    queryFn: ({ signal }) => apiGetWallet({ walletId: walletId as string }, { signal }),
     enabled: protectedEnabled,
     refetchInterval: (query) =>
       isSyncInProgress(query.state.data) ? 1_200 : false,
@@ -80,7 +80,7 @@ export function useCreateWallet() {
     mutationFn: async (request: CreateWalletRequest) => {
       // A wallet always belongs to a user, so a guest account is created first.
       await ensureSession()
-      return api.wallets.create(request)
+      return apiCreateWallet(request)
     },
     onSuccess: (wallet) => {
       queryClient.setQueryData(queryKeys.wallet(wallet.id), wallet)

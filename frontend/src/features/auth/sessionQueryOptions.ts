@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query'
-import { api } from '@/api'
+import { apiInitializeSession } from '@/api'
 import { runAuthBootstrap } from '@/api/authGate'
 import type { User } from '@/api/types'
 import { queryKeys } from '@/lib/query/queryKeys'
@@ -11,7 +11,7 @@ export function sessionQueryOptions() {
   return {
     queryKey: queryKeys.session(),
     queryFn: ({ signal }: { signal: AbortSignal }) =>
-      api.auth.initializeSession({ signal }),
+      apiInitializeSession({ signal }),
     staleTime: SESSION_STALE_TIME_MS,
     retry: false as const,
   }

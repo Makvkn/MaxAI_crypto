@@ -7,7 +7,15 @@ import {
   type ReactNode,
 } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, tokenStore } from '@/api'
+import {
+  apiCreateGuestSession,
+  apiLoginWithEmail,
+  apiLoginWithGoogle,
+  apiLogout,
+  apiRegisterWithEmail,
+  apiUpgradeAccount,
+  tokenStore,
+} from '@/api'
 import { resetAuthGate, syncAuthGate, waitForAuthReady } from '@/api/authGate'
 import type {
   AuthSession,
@@ -115,13 +123,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   )
 
   const guestMutation = useMutation({
-    mutationFn: () => api.auth.createGuestSession(),
+    mutationFn: () => apiCreateGuestSession(),
     onSuccess: adopt,
   })
 
   const emailLoginMutation = useMutation({
     mutationFn: (credentials: EmailCredentials) =>
-      api.auth.loginWithEmail(credentials),
+      apiLoginWithEmail(credentials),
     onSuccess: (session) => {
       adopt(session)
       analytics.track('signed_in', { method: 'EMAIL' })
@@ -130,7 +138,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const emailRegisterMutation = useMutation({
     mutationFn: (credentials: EmailCredentials) =>
-      api.auth.registerWithEmail(credentials),
+      apiRegisterWithEmail(credentials),
     onSuccess: (session) => {
       adopt(session)
       analytics.track('signed_in', { method: 'EMAIL' })
@@ -138,7 +146,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   })
 
   const googleMutation = useMutation({
-    mutationFn: () => api.auth.loginWithGoogle({ id_token: googleIdToken() }),
+    mutationFn: () => apiLoginWithGoogle({ id_token: googleIdToken() }),
     onSuccess: (session) => {
       adopt(session)
       analytics.track('signed_in', { method: 'GOOGLE' })
@@ -147,7 +155,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const upgradeMutation = useMutation({
     mutationFn: (request: UpgradeAccountRequest) =>
-      api.auth.upgradeAccount(request),
+      apiUpgradeAccount(request),
     onSuccess: (session, request) => {
       adopt(session)
       analytics.track('account_upgraded', { method: request.method })
@@ -155,7 +163,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   })
 
   const logoutMutation = useMutation({
-    mutationFn: () => api.auth.logout(),
+    mutationFn: () => apiLogout(),
     onSettled: () => {
       bootstrapEpoch.current.invalidate()
       tokenStore.clear()
