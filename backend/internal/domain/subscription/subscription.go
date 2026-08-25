@@ -68,7 +68,7 @@ type Subscription struct {
 // FreeEntitlements are the MVP free-plan limits (§148). The AI limit is
 // overridden by configuration so it can be tuned without a deployment.
 var FreeEntitlements = Entitlements{
-	MaxWallets:         1,
+	MaxWallets:         3,
 	AIOperationsPerDay: 10,
 	Features:           []Feature{FeatureAI, FeatureScenario, FeatureWallets},
 }

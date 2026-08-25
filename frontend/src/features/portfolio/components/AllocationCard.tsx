@@ -52,6 +52,18 @@ export function AllocationCard({ portfolio }: { portfolio: Portfolio }) {
     )
   }
 
+  if (portfolio.positions.length === 0) {
+    return (
+      <Card>
+        <CardHeader title="Allocation" />
+        <EmptyState
+          title="No assets to allocate"
+          description="This wallet has no holdings, so there is nothing to break down."
+        />
+      </Card>
+    )
+  }
+
   if (shown.length === 0) {
     return (
       <Card>

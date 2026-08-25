@@ -48,14 +48,26 @@ func (c *Calculator) Build(ctx context.Context, w wallet.Wallet, lastSyncedAt *t
 	if err != nil {
 		return portfolio.Portfolio{}, err
 	}
+	now := time.Now().UTC()
 	if len(positions) == 0 {
+		// A finished sync with no holdings is a known empty portfolio: report
+		// $0 rather than unavailable. Unknown≠zero still applies when prices
+		// are missing for held assets below.
+		freshness := shared.FreshnessVeryStale
+		if lastSyncedAt != nil {
+			freshness = c.freshness.ClassifyAt(*lastSyncedAt, now)
+		}
+		zero := shared.Known(shared.NewDecimal(decimal.Zero))
 		return portfolio.Portfolio{
 			WalletID:           w.ID,
 			Currency:           shared.CurrencyUSD,
-			ValuationStatus:    shared.ValuationUnavailable,
-			DataQuality:        shared.DataQualityUnavailable,
-			DataFreshness:      shared.FreshnessVeryStale,
-			AsOf:               time.Now().UTC(),
+			TotalValueUSD:      zero,
+			ValuationStatus:    shared.ValuationComplete,
+			DataQuality:        shared.DataQualityComplete,
+			DataFreshness:      freshness,
+			Change24hUSD:       zero,
+			Change24hPct:       zero,
+			AsOf:               now,
 			LastSyncedAt:       lastSyncedAt,
 			CalculationVersion: portfolio.CalculationVersion,
 			Positions:          []portfolio.Position{},
@@ -75,7 +87,6 @@ func (c *Calculator) Build(ctx context.Context, w wallet.Wallet, lastSyncedAt *t
 		return portfolio.Portfolio{}, err
 	}
 
-	now := time.Now().UTC()
 	result := portfolio.Portfolio{
 		WalletID:           w.ID,
 		Currency:           shared.CurrencyUSD,

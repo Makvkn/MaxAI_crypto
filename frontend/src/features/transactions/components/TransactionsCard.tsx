@@ -82,7 +82,7 @@ export function TransactionsCard({
           title="No transactions"
           description={
             filter === 'ALL'
-              ? 'No transactions were found for this wallet in the analysed history.'
+              ? 'This wallet has no transactions in the analysed history.'
               : 'No transactions of this type were found. Try another filter.'
           }
         />

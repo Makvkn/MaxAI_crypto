@@ -67,6 +67,32 @@ describe('PortfolioHeader', () => {
     expect(screen.queryByText('$0.00')).not.toBeInTheDocument()
   })
 
+  it('shows $0 for a known-empty wallet instead of a dash', () => {
+    renderWithProviders(
+      <PortfolioHeader
+        wallet={makeWallet()}
+        portfolio={makePortfolio({
+          total_value_usd: '0',
+          valuation_status: ValuationStatus.COMPLETE,
+          data_quality: DataQuality.COMPLETE,
+          change_24h_pct: '0',
+          change_24h_usd: '0',
+          positions: [],
+        })}
+        onRefresh={noop}
+        isRefreshing={false}
+      />,
+    )
+
+    expect(screen.getByText('$0.00')).toBeInTheDocument()
+    expect(
+      screen.getByText('This wallet has no holdings on the selected chain.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByLabelText('Portfolio valuation is unavailable'),
+    ).not.toBeInTheDocument()
+  })
+
   it('labels stale data instead of hiding it', () => {
     renderWithProviders(
       <PortfolioHeader
