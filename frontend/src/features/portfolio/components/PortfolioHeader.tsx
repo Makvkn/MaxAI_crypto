@@ -13,7 +13,7 @@ import { truncateMiddle } from '@/lib/formatting/address'
  *
  * The total, its 24h change and every qualifier around it come from the
  * backend. When the valuation is unavailable the figure is absent rather than
- * zero, and the reason sits next to it.
+ * zero. A known-empty wallet arrives as `$0` with COMPLETE valuation.
  */
 export function PortfolioHeader({
   wallet,
@@ -30,6 +30,11 @@ export function PortfolioHeader({
   const unavailable =
     portfolio.valuation_status === ValuationStatus.UNAVAILABLE ||
     portfolio.total_value_usd === null
+  const emptyWallet =
+    !unavailable &&
+    portfolio.positions.length === 0 &&
+    portfolio.total_value_usd !== null &&
+    Number(portfolio.total_value_usd) === 0
 
   return (
     <div className="flex flex-wrap items-start justify-between gap-6">
@@ -62,6 +67,12 @@ export function PortfolioHeader({
             unpricedCount={portfolio.exclusions.unpriced_positions}
           />
         </div>
+
+        {emptyWallet ? (
+          <p className="mt-2 text-[13px] text-fg-subtle">
+            This wallet has no holdings on the selected chain.
+          </p>
+        ) : null}
 
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <Delta

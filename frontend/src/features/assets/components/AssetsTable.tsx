@@ -53,7 +53,12 @@ export function AssetsTable({
         }
       />
 
-      {visible.length === 0 ? (
+      {portfolio.positions.length === 0 ? (
+        <EmptyState
+          title="No assets"
+          description="This wallet has no token or native balances on the selected chain."
+        />
+      ) : visible.length === 0 ? (
         <EmptyState
           title="No visible assets"
           description="This wallet holds no assets that pass the backend's visibility rules."

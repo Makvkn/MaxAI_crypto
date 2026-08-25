@@ -82,6 +82,7 @@ type Portfolio struct {
 	WalletID uuid.UUID
 	Currency shared.Currency
 	// TotalValueUSD is the sum over positions with a valid price only (§39).
+	// A known-empty wallet (synced, no holdings) is $0, not unknown.
 	TotalValueUSD      shared.NullDecimal
 	ValuationStatus    shared.ValuationStatus
 	DataQuality        shared.DataQuality
